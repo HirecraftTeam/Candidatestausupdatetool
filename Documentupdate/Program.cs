@@ -20,40 +20,84 @@ namespace Documentupdate
             string logFilePath = ConfigurationManager.AppSettings["LogFilePath"];
 
 
-            
+
             var candidates = ReadExcelFile(excelFilePath);
 
-          //comment
+            //comment
             foreach (var candidate in candidates)
             {
-               
-                Loggerfile.LogInfo($"Processing candidate {candidate.ApplicantNo}, indent number {candidate.IndentNo}");
 
-               
+                Loggerfile.LogInfo($"Processing candidate {candidate.Applicantid}, indent number {candidate.IndentNo}");
+
+
+
                 if (IsCandidateValid(connectionString, candidate))
                 {
-                    
-                    string query = string.Format("UPDATE hc_req_resume SET stage_id = {0}, status_id = {1} WHERE applicant_no = {2} AND indent_no = {3}",
-                        candidate.UpdatedStageId, candidate.UpdatedStatusId, candidate.ApplicantNo, candidate.IndentNo);
 
-                  
+                    string query = string.Format(@"
+                        UPDATE rr
+                         SET rr.stageid      = {0},
+                          rr.statusid     = {1},
+                         rr.stagelevel   = stg.stagelevel,
+                         rr.stagetitle   = stg.title,
+                        rr.statuslevel  = sts.statuslevel,
+                       rr.statustitle  = sts.title
+                         FROM hc_req_resume rr
+                       JOIN hc_resume_bank rb ON rr.resid = rb.rid
+                        JOIN hc_requisitions req ON req.rid = rr.reqid
+                       JOIN hcm_stage stg ON stg.rid = {0}    
+                      JOIN hcm_status sts ON sts.rid = {1}    
+                          WHERE rb.candidateno = {2}
+                       AND req.reqnumber = '{3}'
+                        AND rr.stageid = {4}
+                         AND rr.statusid = {5}
+
+
+                              INSERT INTO HC_REQ_RESUME_STAGE_STATUS
+                          (ReqResID, StageLevel, StageTitle, StatusLevel, StatusTitle, StageID, StatusID, Notes)
+                                SELECT 
+                            rr.rid,
+                         stg.stagelevel,
+                          stg.title,
+                         sts.statuslevel,
+                           sts.title,
+                               {0},
+                                 {1},
+                          'Bulk status update based on mail """"External - FW: Format:02122025""""'
+                        FROM hc_req_resume rr
+                              JOIN hc_resume_bank rb ON rr.resid = rb.rid
+                            JOIN hc_requisitions req ON req.rid = rr.reqid
+                                JOIN hcm_stage stg ON stg.rid = {0}
+                        JOIN hcm_status sts ON sts.rid = {1}
+                               WHERE rb.candidateno = {2}
+                        AND req.reqnumber = '{3}'
+                             AND rr.stageid = {0}     
+                                 AND rr.statusid = {1}  ",
+                                        candidate.UpdatedStageId,
+                                  candidate.UpdatedStatusId,
+                              candidate.Applicantid,
+                                 candidate.IndentNo,
+                       candidate.CurrentStageId,
+                              candidate.CurrentStatusId);
+
+
                     ExecuteQuery(connectionString, query);
 
-                  
-                    Loggerfile.LogInfo($"Successfully updated candidate {candidate.ApplicantNo} with indent number {candidate.IndentNo}");
-                    Console.WriteLine($"Successfully updated candidate {candidate.ApplicantNo} with indent number {candidate.IndentNo}");
-                
+
+                    Loggerfile.LogInfo($"Successfully updated candidate {candidate.Applicantid} with indent number {candidate.IndentNo}");
+                    Console.WriteLine($"Successfully updated candidate {candidate.Applicantid} with indent number {candidate.IndentNo}");
+
                 }
                 else
                 {
-                   
-                    Loggerfile.LogError($"Candidate {candidate.ApplicantNo} with indent number {candidate.IndentNo} failed validation checks.");
-                    Console.WriteLine($"Candidate {candidate.ApplicantNo} with indent number {candidate.IndentNo} failed validation checks.");
+
+                    Loggerfile.LogError($"Candidate {candidate.Applicantid} with indent number {candidate.IndentNo} failed validation checks.");
+                    Console.WriteLine($"Candidate {candidate.Applicantid} with indent number {candidate.IndentNo} failed validation checks.");
                 }
             }
         }
 
-       
+
         static List<CandidateData> ReadExcelFile(string filePath)
         {
             try
@@ -79,16 +123,17 @@ namespace Documentupdate
                     }
                 }
 
-                // Convert DataTable -> List<CandidateData>
+
                 return dt.AsEnumerable()
                          .Select(r => new CandidateData
                          {
-                             ApplicantNo = r[0].ToString(),
+                             Applicantid = r[0].ToString(),
                              IndentNo = r[1].ToString(),
                              CurrentStageId = r[2].ToString(),
                              CurrentStatusId = r[3].ToString(),
-                             UpdatedStageId = r[4].ToString(),
-                             UpdatedStatusId = r[5].ToString()
+                             Status = r[4].ToString(),
+                             UpdatedStageId = r[5].ToString(),
+                             UpdatedStatusId = r[6].ToString()
                          })
                          .ToList();
             }
@@ -110,8 +155,8 @@ namespace Documentupdate
                    ON rr.resid = rb.rid
                 JOIN hc_requisitions req
                ON req.rid = rr.reqid
-               WHERE rb.candidateno = '{candidate.ApplicantNo}'
-             AND req.reqnumber = '{candidate.IndentNo}'
+               WHERE rb.candidateno = '{candidate.Applicantid}'
+             AND CAST(req.reqnumber AS NVARCHAR(50)) = '{candidate.IndentNo}'
               AND rr.stageid = '{candidate.CurrentStageId}'
                 AND rr.statusid = '{candidate.CurrentStatusId}'
                                                              ";
@@ -120,11 +165,11 @@ namespace Documentupdate
 
             int count = ExecuteScalarQuery(connectionString, query);
 
-           
+
             return count > 0;
         }
 
-        
+
         static int ExecuteScalarQuery(string connectionString, string query)
         {
             using (SqlConnection connection = new SqlConnection(connectionString))
@@ -150,16 +195,19 @@ namespace Documentupdate
     // Candidate Data Class
     public class CandidateData
     {
-        public string ApplicantNo { get; set; }
+        public string Applicantid { get; set; }
         public string IndentNo { get; set; }
         public string CurrentStageId { get; set; }
         public string CurrentStatusId { get; set; }
+
         public string UpdatedStageId { get; set; }
         public string UpdatedStatusId { get; set; }
+        public string Status { get; set; }
+        public string CurrentStatus { get; set; }
     }
 
     // Loggerfile Class
 
 
-    
+
 }
