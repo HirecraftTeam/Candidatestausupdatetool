@@ -150,10 +150,10 @@ namespace Documentupdate
 
             string query = $@"
                    SELECT COUNT(*)
-                  FROM hc_resume_bank rb
-                 JOIN hc_req_resume rr 
+                  FROM hc_resume_bank rb with(nolock)
+                 JOIN hc_req_resume rr with(nolock)
                    ON rr.resid = rb.rid
-                JOIN hc_requisitions req
+                JOIN hc_requisitions req with(nolock)
                ON req.rid = rr.reqid
                WHERE rb.candidateno = '{candidate.Applicantid}'
              AND CAST(req.reqnumber AS NVARCHAR(50)) = '{candidate.IndentNo}'
